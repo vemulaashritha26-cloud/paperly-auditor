@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AuditQuest — Question Paper Quality Auditor</title>
+  <style>
+    :root{--ink:#263447;--muted:#758297;--line:#ece9e6;--paper:#fffefd;--lav:#ede9fe;--lav-strong:#6d5ab5;--mint:#e6f5ee;--mint-strong:#39886d;--peach:#fff0e7;--peach-strong:#ce7650;--blue:#eaf3fd;--blue-strong:#5387c7;--shadow:0 14px 36px rgba(49,60,79,.08)}
+    *{box-sizing:border-box} body{margin:0;background:#fbfaf8;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.shell{max-width:1180px;margin:auto;padding:0 26px}.nav-wrap{position:sticky;top:0;z-index:5;padding:18px 0;background:rgba(251,250,248,.91);backdrop-filter:blur(13px)}nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 18px 0 21px;border:1px solid #f0eeeb;border-radius:19px;background:rgba(255,254,253,.92);box-shadow:0 8px 26px rgba(68,62,81,.05)}.brand{display:flex;align-items:center;gap:11px;font-size:19px;font-weight:800;letter-spacing:-.5px}.brand-mark{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,#9787de,#667acc);color:white;box-shadow:0 6px 12px #7767cb40}
+    .links a{font-weight:650;font-size:14px;text-decoration:none;color:#68758a;margin-left:20px}
+    main{padding:38px 0 65px}
+    .card{border:1px solid #efedea;border-radius:20px;background:var(--paper);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+    .workspace{display:grid;grid-template-columns:1.2fr 0.8fr;gap:22px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+    .panel{padding:15px}
+    .audit-button{width:100%;padding:13px;border:0;border-radius:12px;color:#fff;background:linear-gradient(110deg,#7868c8,#6179cc);cursor:pointer;font-weight:800}
+    .drop{height:120px;border:2px dashed #cfc7ed;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-direction:column;margin-bottom:15px;cursor:pointer}
+    textarea{width:100%;height:80px;border:1px solid #e5e2df;border-radius:11px;padding:10px;margin-bottom:15px}
+    .match-highlight{background:#fff0ad;border-bottom:2px solid #ce7650;font-weight:bold}
+    .question-table{width:100%;border-collapse:collapse;font-size:13px}
+    .question-table th, .question-table td{text-align:left;padding:10px;border-bottom:1px solid #eee}
+    .pill{padding:4px 8px;border-radius:10px;font-size:10px;font-weight:bold;background:#eee}
+    .hidden{display:none}
+    .score-head{display:flex;align-items:center;gap:20px;background:#f0f7f3;padding:15px;border-radius:15px}
+    .ring{width:50px;height:50px;border-radius:50%;border:5px solid #39886d;display:grid;place-items:center;font-weight:bold}
+    .download-link{display:inline-block;margin-top:15px;color:var(--lav-strong);text-decoration:none;font-weight:bold;margin-right:20px}
+    .history-item{cursor:pointer;padding:10px;border-bottom:1px solid #eee;display:flex;justify-content:space-between}
+  </style>
+</head>
+<body>
+  <div class="nav-wrap"><div class="shell"><nav><div class="brand"><span class="brand-mark">✓</span> AuditQuest</div><div class="links"><a href="#">Dashboard</a></div></nav></div></div>
+  
+  <main class="shell">
+    <section class="workspace">
+      <div class="card">
+        <h2>Start Quality Audit</h2>
+        <div class="drop" onclick="$('file').click()">
+          <strong>Click or Drop Paper</strong>
+          <small id="file-name">Supports PDF, DOCX, TXT</small>
+          <input type="file" id="file" class="hidden" onchange="handleFile(this)">
+        </div>
+        <label>Syllabus Topics (for highlighting):</label>
+        <textarea id="syllabus" placeholder="e.g. Normalization, SQL, Joins"></textarea>
+        <button class="audit-button" id="run-btn" onclick="runAudit()">Run quality audit →</button>
+      </div>
+
+      <div class="card">
+        <h2>Report Summary</h2>
+        <div id="placeholder">Upload a paper to see results.</div>
+        <div id="report-ui" class="hidden">
+            <div class="score-head">
+                <div class="ring" id="score-ring">0</div>
+                <div><strong id="score-label">Quality Score</strong><br><small id="q-count">0 questions found</small></div>
+            </div>
+            <div id="rubric-box" style="margin-top:15px"></div>
+            <div id="blueprint-box" style="margin-top:15px"></div>
+            <div id="recommendations-box" style="margin-top:15px"></div>
+            <div id="findings-list" style="margin-top:15px"></div>
+            <a id="dl-json" class="download-link">JSON Report ↓</a>
+            <a id="dl-pdf" class="download-link" style="color:#ce7650">PDF Export ↓</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="details-ui" class="hidden">
+        <div class="grid">
+            <div class="card panel"><h3>Difficulty</h3><canvas id="difficultyChart"></canvas></div>
+            <div class="card panel"><h3>Bloom's Distribution</h3><div id="bloom-bars"></div></div>
+            <div class="card panel"><h3>Outcomes (CO)</h3><div id="co-bars"></div></div>
+        </div>
+
+        <div class="card">
+            <h3>Extracted Questions</h3>
+            <table class="question-table">
+                <thead><tr><th>#</th><th>Question</th><th>Bloom</th><th>Difficulty</th><th>Marks</th></tr></thead>
+                <tbody id="question-rows"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card">
+        <h3>Recent Audits</h3>
+        <div id="history-list"></div>
+        <div id="compare-box" style="margin-top:16px;display:none;">
+            <h4>Compare selected reports</h4>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <select id="compare-left" style="padding:8px 10px;border-radius:8px;border:1px solid #ddd;"></select>
+                <span>vs</span>
+                <select id="compare-right" style="padding:8px 10px;border-radius:8px;border:1px solid #ddd;"></select>
+                <button class="audit-button" style="width:auto;padding:10px 16px;" onclick="compareReports()">Compare</button>
+                <a id="compare-pdf" class="download-link" style="display:none;">PDF Compare ↓</a>
+            </div>
+            <div id="compare-output" style="margin-top:12px;"></div>
+        </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const API_BASE = (() => {
+      const currentPort = window.location.port;
+      const isStaticHost = currentPort === '5500' || window.location.protocol === 'file:';
+      return isStaticHost ? 'http://127.0.0.1:8011' : '';
+    })();
+    let myChart = null;
+
+    function handleFile(input) {
+      if (input.files[0]) {
+        $('file-name').innerText = input.files[0].name;
+      }
+    }
+
+    function renderBars(dist, targetId) {
+      const container = $(targetId);
+      const entries = Object.entries(dist || {});
+      if (!entries.length) {
+        container.innerHTML = '<div class="pill">No data</div>';
+        return;
+      }
+
+      const max = Math.max(...entries.map(([, value]) => Number(value) || 0), 1);
+      const colors = ['#6d5ab5', '#39886d', '#ce7650', '#5387c7', '#b86fbd'];
+      container.innerHTML = entries.map(([label, value], idx) => {
+        const width = Math.max((Number(value || 0) / max) * 100, 10);
+        return `
+          <div style="margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;">
+              <strong>${label}</strong>
+              <span>${value}</span>
+            </div>
+            <div style="height:10px;border-radius:999px;background:#f0efe9;overflow:hidden;">
+              <div style="height:100%;width:${width}%;background:${colors[idx % colors.length]};border-radius:999px;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function readJsonResponse(response) {
+      const text = await response.text();
+      if (!text) {
+        return null;
+      }
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        return null;
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const response = await fetch(`${API_BASE}/api/reports`);
+        const data = await readJsonResponse(response);
+        const list = $('history-list');
+        if (!Array.isArray(data) || !data.length) {
+          list.innerHTML = '<div class="pill">No reports yet</div>';
+          $('compare-box').style.display = 'none';
+          return;
+        }
+
+        list.innerHTML = data.map(report => `
+          <div class="history-item" data-id="${report.id}">
+            <span>${report.filename}</span>
+            <span class="pill">${report.quality_score}</span>
+          </div>
+        `).join('');
+
+        const oldLeft = $('compare-left');
+        const oldRight = $('compare-right');
+        const options = data.map(report => `<option value="${report.id}">${report.filename}</option>`).join('');
+        $('compare-left').innerHTML = options;
+        $('compare-right').innerHTML = options;
+        if (data.length > 1) {
+          $('compare-box').style.display = 'block';
+        }
+
+        list.querySelectorAll('.history-item').forEach(item => {
+          item.addEventListener('click', async () => {
+            const response = await fetch(`${API_BASE}/api/reports/${item.dataset.id}`);
+            const report = await readJsonResponse(response);
+            if (report) {
+              renderReport(report);
+            }
+          });
+        });
+      } catch (error) {
+        $('history-list').innerHTML = '<div class="pill">Unable to load report history</div>';
+      }
+    }
+
+    async function compareReports() {
+      const leftId = $('compare-left').value;
+      const rightId = $('compare-right').value;
+      if (!leftId || !rightId || leftId === rightId) {
+        $('compare-output').innerHTML = '<div class="pill">Select two different reports to compare.</div>';
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/api/reports/compare/${leftId}/${rightId}`);
+        const data = await readJsonResponse(response);
+        if (!data) {
+          throw new Error('Comparison failed');
+        }
+        $('compare-pdf').href = `${API_BASE}/api/reports/compare/${leftId}/${rightId}/pdf`;
+        $('compare-pdf').style.display = 'inline-block';
+        $('compare-output').innerHTML = `
+          <div style="padding:12px;border-radius:12px;background:#f6f1ff;border:1px solid #ddd;">
+            <strong>Comparison result</strong><br>
+            <small>${data.summary.left} vs ${data.summary.right}</small>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:8px;margin-top:10px;">
+              <div><strong>Quality</strong><br>${data.side_by_side.quality.left} → ${data.side_by_side.quality.right}</div>
+              <div><strong>Coverage</strong><br>${data.side_by_side.coverage.left}% → ${data.side_by_side.coverage.right}%</div>
+              <div><strong>Rubric</strong><br>${data.side_by_side.rubric.left} → ${data.side_by_side.rubric.right}</div>
+              <div><strong>Policy</strong><br>${data.side_by_side.policy.left} → ${data.side_by_side.policy.right}</div>
+            </div>
+            <small style="display:block;margin-top:10px;">Quality delta: ${data.delta.quality_score} | Coverage delta: ${data.delta.coverage} | Rubric delta: ${data.delta.rubric}</small>
+            <div style="margin-top:8px;">${data.recommendation}</div>
+          </div>
+        `;
+      } catch (error) {
+        $('compare-output').innerHTML = '<div class="pill">Unable to compare reports.</div>';
+      }
+    }
+
+    async function runAudit() {
+      const file = $('file').files[0];
+      if (!file) {
+        return alert('Select a file');
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('syllabus', $('syllabus').value);
+
+      $('run-btn').innerText = 'Analyzing...';
+      try {
+        const response = await fetch(`${API_BASE}/api/audit`, { method: 'POST', body: formData });
+        const data = await readJsonResponse(response);
+        if (!response.ok || !data) {
+          throw new Error((data && (data.detail || data.error)) || 'Audit failed');
+        }
+        renderReport(data);
+        loadHistory();
+      } catch (error) {
+        alert(error.message || 'Something went wrong');
+      } finally {
+        $('run-btn').innerText = 'Run quality audit →';
+      }
+    }
+
+    function renderReport(data) {
+      $('placeholder').classList.add('hidden');
+      $('report-ui').classList.remove('hidden');
+      $('details-ui').classList.remove('hidden');
+
+      $('score-ring').innerText = data.quality_score;
+      $('q-count').innerText = `${data.summary.question_count} questions detected • ${data.coverage?.score ?? 100}% coverage`;
+      $('dl-json').href = `${API_BASE}/api/reports/${data.id}`;
+      $('dl-pdf').href = `${API_BASE}/api/reports/${data.id}/pdf`;
+
+      const rubric = data.rubric || {};
+      const coBalance = data.co_balance || {};
+      const blueprint = data.blueprint || {};
+      const policy = data.policy || {};
+      const recommendations = data.recommendations || [];
+      $('rubric-box').innerHTML = `
+        <div style="padding:12px;border-radius:12px;background:#f6f1ff;border:1px solid #dfd2ff;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <strong>Rubric score</strong>
+            <span class="pill">${rubric.score ?? data.quality_score}</span>
+          </div>
+          <small>Coverage: ${data.coverage?.score ?? 0}% • CO balance: ${coBalance.score ?? 0}% • Validation issues: ${(data.validation || []).length}</small>
+        </div>
+      `;
+      $('blueprint-box').innerHTML = `
+        <div style="padding:12px;border-radius:12px;background:#eef5ff;border:1px solid #d7e5ff;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <strong>Exam blueprint</strong>
+            <span class="pill">${blueprint.status || 'N/A'}</span>
+          </div>
+          <small>Difficulty mix: Easy ${blueprint.actual?.Easy ?? 0}, Medium ${blueprint.actual?.Medium ?? 0}, Hard ${blueprint.actual?.Hard ?? 0}. Policy score: ${policy.score ?? 0}</small>
+        </div>
+      `;
+      $('recommendations-box').innerHTML = `
+        <div style="padding:12px;border-radius:12px;background:#eef8f4;border:1px solid #cbead7;">
+          <strong>Recommended next steps</strong>
+          <ul style="margin:8px 0 0 18px;padding:0;line-height:1.5;">
+            ${(recommendations || []).map(item => `<li>${item}</li>`).join('') || '<li>No additional recommendations.</li>'}
+          </ul>
+        </div>
+      `;
+
+      const findings = (data.findings || []).map(item => `
+        <div style="padding:10px 12px;border-radius:10px;margin-bottom:8px;background:${item.status === 'warning' ? '#fff6e9' : item.status === 'error' ? '#fdeaea' : '#eef6ff'};border:1px solid ${item.status === 'warning' ? '#efce9a' : item.status === 'error' ? '#f4b5b5' : '#cfe0ff'};">
+          <strong>${item.title}</strong><br>
+          <small>${item.detail}</small>
+        </div>
+      `).join('');
+      $('findings-list').innerHTML = findings || '<div class="pill">No findings</div>';
+
+      const syllabusWords = ($('syllabus').value || '')
+        .toLowerCase()
+        .split(',')
+        .map(word => word.trim())
+        .filter(word => word.length > 2);
+
+      $('question-rows').innerHTML = (data.questions || []).map(q => {
+        let text = q.text;
+        syllabusWords.forEach(word => {
+          const reg = new RegExp(`\\b(${word})\\b`, 'gi');
+          text = text.replace(reg, '<span class="match-highlight">$1</span>');
+        });
+
+        return `
+          <tr>
+            <td>${q.number}</td>
+            <td>${text}</td>
+            <td><span class="pill">${q.bloom}</span></td>
+            <td><span class="pill" style="background:#fdeeee">${q.difficulty}</span></td>
+            <td>${q.marks || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      renderChart(data.difficulty_distribution || {});
+      renderBars(data.bloom_distribution || {}, 'bloom-bars');
+      renderBars(data.co_distribution || {}, 'co-bars');
+    }
+
+    function renderChart(dist) {
+      if (myChart) {
+        myChart.destroy();
+      }
+      myChart = new Chart($('difficultyChart'), {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(dist || {}),
+          datasets: [{
+            data: Object.values(dist || {}),
+            backgroundColor: ['#65ba96', '#efae66', '#ee7c7c']
+          }]
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', loadHistory);
+  </script>
